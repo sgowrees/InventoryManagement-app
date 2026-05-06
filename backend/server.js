@@ -6,8 +6,11 @@ const mongoose = require('mongoose');
 const errorHandler = require("./middleware/errorMiddleware");
 const cookieParser = require("cookie-parser");
 
-//import route
+//import 
 const userRoute = require("./routes/userRoute");
+const Product = require('./models/productModel');
+const productRoute = require("./routes/productRoute"); 
+
 
 
 const app = express();
@@ -20,8 +23,9 @@ app.use(express.urlencoded({extended: false}));
 app.use(bodyParser.json());
 app.use(cors());
 
-//route Middleware
+//route Middleware 
 app.use("/api/users", userRoute);
+app.use("/api/products", productRoute);
 
 
 //routes

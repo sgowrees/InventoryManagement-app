@@ -17,16 +17,18 @@ const productSchema = mongoose.Schema({
     },
     description:{
         type: String,
-        default: "bio",
+        default: "description",
         maxLength: [250, "bio must not be more than 250 characters"]
     },
     quantity: {
         type: Number,
-        required: true
+        required: true,
+        default: 0
     },
     price:{
         type: Number,
-        required: true
+        required: true,
+        default: 0
     }, 
     sku:{
         type: String,

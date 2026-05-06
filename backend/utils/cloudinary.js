@@ -27,6 +27,7 @@ const uploadToCloudinary = (fileBuffer) => {
   });
 };
 
+
 // delete image from cloudinary (used later for update/delete)
 const deleteFromCloudinary = async (public_id) => {
   return await cloudinary.uploader.destroy(public_id);
