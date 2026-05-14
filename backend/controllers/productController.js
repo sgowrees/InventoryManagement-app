@@ -8,6 +8,10 @@ const { uploadToCloudinary , deleteFromCloudinary } = require("../utils/cloudina
 
 
 const createProduct = asyncHandler(async (req,res) => {
+    console.log('Create product request received');
+    console.log('Request body:', req.body);
+    console.log('Request file:', req.file);
+
     const { name, sku, category, quantity, price, description } = req.body;
 
     //validate
@@ -24,7 +28,22 @@ const createProduct = asyncHandler(async (req,res) => {
         res.status(400);
         throw new Error("Invalid quantity")
     }
-
+    const productExists = await Product.findOne({
+        $or: [
+            {
+                sku: { $regex: `^${sku}$`, $options: "i" }
+            },
+            {
+                name: { $regex: `^${name}$`, $options: "i" },
+                price,
+                category: { $regex: `^${category}$`, $options: "i" }
+            }
+        ]
+    });    
+    if(productExists){
+        res.status(400)
+        throw new Error("Product already Exists")
+    }
     //img upload
     let imageURL = '';
     if (req.file){
@@ -45,7 +64,7 @@ const createProduct = asyncHandler(async (req,res) => {
     });
     if (product){
         res.status(201).json({
-            user: req.user._id,
+            userId: req.user._id,
             name: product.name,
             sku: product.sku,
             category: product.category,
@@ -61,14 +80,50 @@ const createProduct = asyncHandler(async (req,res) => {
 
 });
 
+// get all products + search + sort
+const getProducts = asyncHandler(async (req, res) => {
 
+    const { search, sort, category } = req.query;
 
-//get all products
-const getProducts = asyncHandler( async (req, res) =>{
+    // FIX: safer user id access
+    const userId = req.user?._id;
 
-    const products = await Product.find({user: req.user_id});
-    res.status(200).json(products)
+    if (!userId) {
+        return res.status(401).json({ message: "Not authorized" });
+    }
 
+    let filter = {
+        userId: userId
+    };
+
+    // SEARCH
+    if (search) {
+        filter.name = {
+            $regex: search,
+            $options: "i"
+        };
+    }
+
+    // CATEGORY FILTER
+    if (category) {
+        filter.category = category;
+    }
+
+    let query = Product.find(filter);
+
+    // SORT FIX
+    if (sort) {
+        const sortOption =
+            sort === "asc" ? "name" :
+            sort === "desc" ? "-name" :
+            sort;
+
+        query = query.sort(sortOption);
+    }
+
+    const products = await query;
+
+    res.status(200).json(products);
 });
 
 
@@ -91,27 +146,34 @@ const getProduct = asyncHandler( async (req, res) =>{
 
 });
 
-const deleteProduct = asyncHandler( async (req, res) =>{
+
+const deleteProduct = asyncHandler(async (req, res) => {
+
     const product = await Product.findById(req.params.id);
-    // validate 
-    if(!product){
-        res.status(400)
-        throw new Error("product not found")
+
+
+    if (!product) {
+        res.status(400);
+        throw new Error("Product not found");
     }
 
-    if (product.user.toString() !== req.user_id){
-        res.status(400)
-        throw new Error("User not authorized")
+    // authorization
+    if (product.userId.toString() !== req.user._id.toString()) {
+    res.status(400);
+    throw new Error("User not authorized");
     }
-    // delete product
-    await product.remove();
-    res.status(200).json({ message: "Product deleted." });
+
+    // delete
+    await product.deleteOne();
+
+    res.status(200).json({
+        message: "Product deleted."
+    });
 
 });
 
-
 const updateProduct = asyncHandler(async (req, res) => {
-    const { name, category, quantity, price, description } = req.body;
+    const { name, sku, category, quantity, price, description } = req.body;
     const { id } = req.params;
 
     const product = await Product.findById(id);
@@ -121,6 +183,15 @@ const updateProduct = asyncHandler(async (req, res) => {
         res.status(400);
         throw new Error("Product not found");
     }
+    if (price < 0 ){
+        res.status(400);
+        throw new Error("Invalid price")
+    }
+    if (quantity < 0 ){
+        res.status(400);
+        throw new Error("Invalid quantity")
+    }
+
 
     // check ownership
     if (product.userId.toString() !== req.user._id.toString()) {
@@ -142,8 +213,8 @@ const updateProduct = asyncHandler(async (req, res) => {
     product.quantity = quantity || product.quantity;
     product.price = price || product.price;
     product.description = description || product.description;
+    product.sku = sku || product.sku;
     product.photo = imageURL;
-
     const updatedProduct = await product.save();
 
     res.status(200).json({
@@ -152,10 +223,14 @@ const updateProduct = asyncHandler(async (req, res) => {
         category: updatedProduct.category,
         quantity: updatedProduct.quantity,
         price: updatedProduct.price,
+        sku: updatedProduct.sku,
         description: updatedProduct.description,
         photo: updatedProduct.photo,
     });
 });
+
+
+
 
 
 module.exports = {
@@ -164,5 +239,7 @@ module.exports = {
     getProduct,
     deleteProduct,
     updateProduct,
+    
+
 
 };
