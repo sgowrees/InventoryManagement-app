@@ -32,6 +32,9 @@ const userSchema = mongoose.Schema({
         type: String,
         default: "bio",
         maxLength: [250, "bio must not be more than 250 characters"]
+    },
+    isAdmin:{
+        type: Boolean
     }
 },
 

@@ -6,6 +6,7 @@ const bcrypt = require("bcryptjs");
 const Token = require("../models/tokenModel")
 const crypto = require("crypto")
 const sendemail = require("../utils/sendEmail")
+const { uploadToCloudinary } = require("../utils/cloudinary")
 
 
 const generateToken = (id) => {
@@ -187,9 +188,13 @@ const updateUser = asyncHandler( async ( req, res) =>{
 
     if(user){
         user.name = req.body.name || user.name;
-        user.photo = req.body.photo || user.photo;
         user.phone = req.body.phone || user.phone;
         user.bio = req.body.bio || user.bio;
+
+        if (req.file){
+            const result = await uploadToCloudinary(req.file.buffer);
+            user.photo = result.secure_url || user.photo;
+        }
 
         const updatedUser = await user.save()
         res.status(200).json({

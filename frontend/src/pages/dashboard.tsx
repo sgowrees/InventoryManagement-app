@@ -1,6 +1,7 @@
 import axios from "axios";
 import { useEffect, useState, type FormEvent } from "react";
 import '../css/dashboard.css'
+import Sidebar from '../components/Sidebar'
 
 
 const BACKEND_URL = import.meta.env.VITE_BACKEND_URL;
@@ -446,37 +447,13 @@ function Dashboard() {
             <div className="layout">
 
                 {/* Sidebar Content */}
-                <aside className={sidebarOpen ? "sidebar" : "sidebar closed"}>
-                    <button
-                        className="toggle-btn"
-                        onClick={() => setSidebarOpen(!sidebarOpen)}>
-                        {sidebarOpen ? "←" : "→"}
-                    </button>
-
-                    {sidebarOpen && (
-                        <ul>
-                            <li><a href="forgot">dashboard</a></li>
-                            <li><a href="forgot">inventory</a></li>
-                            <li><a href="forgot">report</a></li>
-
-                            <li><a href="forgot">settings</a></li>
-                            <li><a href="forgot">profile</a></li>
-                            <li><a href="forgot">account</a></li>
-                            <li><a href="login">logout</a></li>
-
-                        </ul>
-                    )}
-                    {!sidebarOpen && (
-                        <ul>
-                            <li><a href="forgot">logo (add fade)</a></li>
-                        </ul>
-                    )}
-
-                </aside>
+                <Sidebar sidebarOpen={sidebarOpen} setSidebarOpen={setSidebarOpen} />
 
 
                 {/* Main Content */}
                 <main className="main-content">
+
+                    <div id="sidebar-container"></div>
 
                     <div className="grid-container">
                         {filteredProducts.length > 0 ? (
