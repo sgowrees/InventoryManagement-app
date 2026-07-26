@@ -1,25 +1,26 @@
 import { useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { authApi } from "../lib/api";
 
-export default function Forgot() {
+export default function Register() {
+  const [name, setName] = useState("");
   const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [error, setError] = useState("");
-  const [success, setSuccess] = useState("");
   const [loading, setLoading] = useState(false);
+  const navigate = useNavigate();
 
   const handleSubmit = async (e: React.SyntheticEvent) => {
     e.preventDefault();
     setError("");
-    setSuccess("");
     setLoading(true);
     try {
-      await authApi.forgotPassword(email);
-      setSuccess("If an account exists, a reset link has been sent to your email.");
+      await authApi.register(name, email, password);
+      navigate("/dashboard");
     } catch (err: unknown) {
       const msg =
         (err as { response?: { data?: { message?: string } } })?.response?.data
-          ?.message || "Could not send reset email. Please try again.";
+          ?.message || "Registration failed. Please try again.";
       setError(msg);
     } finally {
       setLoading(false);
@@ -30,15 +31,24 @@ export default function Forgot() {
     <div className="auth-page">
       <div className="auth-card">
         <div className="auth-header">
-          <span className="auth-logo">🔑</span>
-          <h1>Reset password</h1>
-          <p>Enter your email and we'll send you a reset link</p>
+          <span className="auth-logo">📋</span>
+          <h1>Create account</h1>
+          <p>Start managing your inventory today</p>
         </div>
 
         {error && <div className="alert alert-error">{error}</div>}
-        {success && <div className="alert alert-success">{success}</div>}
 
         <form onSubmit={handleSubmit} className="auth-form">
+          <label>
+            Full name
+            <input
+              type="text"
+              placeholder="Jane Doe"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              required
+            />
+          </label>
           <label>
             Email
             <input
@@ -49,13 +59,26 @@ export default function Forgot() {
               required
             />
           </label>
+          <label>
+            Password
+            <input
+              type="password"
+              placeholder="At least 6 characters"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              minLength={6}
+              required
+            />
+          </label>
           <button type="submit" className="btn btn-primary btn-full" disabled={loading}>
-            {loading ? "Sending..." : "Send reset link"}
+            {loading ? "Creating account..." : "Create account"}
           </button>
         </form>
 
         <div className="auth-links">
-          <Link to="/login">← Back to sign in</Link>
+          <span>
+            Already have an account? <Link to="/login">Sign in</Link>
+          </span>
         </div>
       </div>
     </div>

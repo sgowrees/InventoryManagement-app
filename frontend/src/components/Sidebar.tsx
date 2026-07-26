@@ -1,36 +1,66 @@
-import React from 'react';
+import { NavLink, useNavigate } from "react-router-dom";
+import { authApi } from "../lib/api";
 
 interface SidebarProps {
   sidebarOpen: boolean;
   setSidebarOpen: (open: boolean) => void;
 }
 
-const Sidebar: React.FC<SidebarProps> = ({ sidebarOpen, setSidebarOpen }) => {
-  return (
-    <aside className={sidebarOpen ? "sidebar" : "sidebar closed"}>
-      <button
-        className="toggle-btn"
-        onClick={() => setSidebarOpen(!sidebarOpen)}
-      >
-        {sidebarOpen ? "←" : "→"}
-      </button>
+const navItems = [
+  { to: "/dashboard", label: "Dashboard", icon: "📦" },
+  { to: "/report", label: "Reports", icon: "📊" },
+  { to: "/setting", label: "Settings", icon: "⚙️" },
+];
 
-      {sidebarOpen && (
-        <ul>
-          <li><a href="dashboard">dashboard</a></li>
-          <li><a href="inventory">inventory</a></li>
-          <li><a href="report">report</a></li>
-          <li><a href="setting">settings</a></li>
-          <li><a href="login">logout</a></li>
-        </ul>
-      )}
-      {!sidebarOpen && (
-        <ul>
-          <li><a href="forgot">logo (add fade)</a></li>
-        </ul>
-      )}
+export default function Sidebar({ sidebarOpen, setSidebarOpen }: SidebarProps) {
+  const navigate = useNavigate();
+
+  const handleLogout = async () => {
+    try {
+      await authApi.logout();
+    } catch {
+      /* proceed to login even if logout fails */
+    }
+    navigate("/login");
+  };
+
+  return (
+    <aside className={`sidebar ${sidebarOpen ? "open" : "closed"}`}>
+      <div className="sidebar-brand">
+        <span className="brand-icon">📋</span>
+        {sidebarOpen && <span className="brand-text">Inventory</span>}
+        <button
+          type="button"
+          className="sidebar-toggle"
+          onClick={() => setSidebarOpen(!sidebarOpen)}
+          aria-label="Toggle sidebar"
+        >
+          {sidebarOpen ? "‹" : "›"}
+        </button>
+      </div>
+
+      <nav className="sidebar-nav">
+        {navItems.map((item) => (
+          <NavLink
+            key={item.to}
+            to={item.to}
+            className={({ isActive }) =>
+              `sidebar-link ${isActive ? "active" : ""}`
+            }
+            title={item.label}
+          >
+            <span className="link-icon">{item.icon}</span>
+            {sidebarOpen && <span>{item.label}</span>}
+          </NavLink>
+        ))}
+      </nav>
+
+      <div className="sidebar-footer">
+        <button type="button" className="sidebar-link logout-btn" onClick={handleLogout}>
+          <span className="link-icon">🚪</span>
+          {sidebarOpen && <span>Logout</span>}
+        </button>
+      </div>
     </aside>
   );
-};
-
-export default Sidebar;
+}

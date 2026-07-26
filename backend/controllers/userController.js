@@ -7,6 +7,8 @@ const Token = require("../models/tokenModel")
 const crypto = require("crypto")
 const sendemail = require("../utils/sendEmail")
 const { uploadToCloudinary } = require("../utils/cloudinary")
+const { setAuthCookie, clearAuthCookie } = require("../utils/cookieOptions")
+const { get, set, del, cacheKeys } = require("../utils/redis")
 
 
 const generateToken = (id) => {
@@ -51,14 +53,7 @@ const registerUser = asyncHandler( async(req, res) => {
     // generate token
     const token = generateToken(user._id);
 
-    // send HTTP cookie 
-    res.cookie("token", token, {
-        path: "/",
-        httpOnly: true,
-        expires: new Date(Date.now() + 1000 * 84600), // 1 day
-        sameSite: "none",
-        secure: true
-    });
+    setAuthCookie(res, token);
 
     if(user){
         res.status(201).json({
@@ -101,14 +96,7 @@ const loginUser = asyncHandler( async (req, res) => {
     // generate token
     const token = generateToken(user._id);
 
-    // send HTTP cookie 
-    res.cookie("token", token, {
-        path: "/",
-        httpOnly: true,
-        expires: new Date(Date.now() + 1000 * 84600), // 1 day
-        sameSite: "none",
-        secure: true
-    });
+    setAuthCookie(res, token);
 
     if (user && passwordIsCorrect){
         res.status(201).json({
@@ -128,16 +116,9 @@ const loginUser = asyncHandler( async (req, res) => {
 
 });
 // logout user
-const logoutUser = asyncHandler(async (req,res) => {
-    
-    res.cookie("token", "", {
-        path: "/",
-        httpOnly: true,
-        expires: new Date(0), 
-        sameSite: "none",
-        secure: true
-    });
-    return res.status(200).json({message: "successfully Logged out"})
+const logoutUser = asyncHandler(async (req, res) => {
+    clearAuthCookie(res);
+    return res.status(200).json({ message: "successfully Logged out" });
 });
 
 
@@ -145,21 +126,29 @@ const logoutUser = asyncHandler(async (req,res) => {
 
 // Get user Data
 
-const getUser = asyncHandler(async ( req, res) => {
-    const user = await User.findById(req.user._id)
+const getUser = asyncHandler(async (req, res) => {
+    const cacheKey = cacheKeys.user(req.user._id);
+    const cached = await get(cacheKey);
+    if (cached) {
+        return res.status(200).json(cached);
+    }
 
-    if(user){
-        res.status(200).json({
+    const user = await User.findById(req.user._id);
+
+    if (user) {
+        const payload = {
             _id: user.id,
             name: user.name,
             email: user.email,
             photo: user.photo,
             phone: user.phone,
             bio: user.bio,
-        });
-    }else{
-        res.status(400)
-        throw new Error("user not found")
+        };
+        await set(cacheKey, payload, 900);
+        res.status(200).json(payload);
+    } else {
+        res.status(400);
+        throw new Error("user not found");
     }
 });
 
@@ -167,19 +156,17 @@ const getUser = asyncHandler(async ( req, res) => {
 
 // get login status
 
-const loginStatus = asyncHandler( async ( req, res) =>{
-    const token = req.cookies.token
-    if (!token){
+const loginStatus = asyncHandler(async (req, res) => {
+    const token = req.cookies.token;
+    if (!token) {
         return res.json(false);
     }
-     //vefiy token
-    const verified = jwt.verify(token, process.env.JWT_SECRET)
-    if(verified){
+    try {
+        jwt.verify(token, process.env.JWT_SECRET);
         return res.json(true);
+    } catch {
+        return res.json(false);
     }
-    return res.json(false);
-
-
 });
 
 
@@ -196,7 +183,9 @@ const updateUser = asyncHandler( async ( req, res) =>{
             user.photo = result.secure_url || user.photo;
         }
 
-        const updatedUser = await user.save()
+        const updatedUser = await user.save();
+        await del(cacheKeys.user(req.user._id));
+
         res.status(200).json({
             _id: updatedUser._id,
             name: updatedUser.name,
@@ -204,7 +193,7 @@ const updateUser = asyncHandler( async ( req, res) =>{
             photo: updatedUser.photo,
             phone: updatedUser.phone,
             bio: updatedUser.bio,
-        })
+        });
     }else{
         res.status(404)
         throw new Error("User not found")
@@ -261,7 +250,7 @@ const forgotPassword = asyncHandler(async (req, res) => {
     throw new Error("User does not exist");
   }
     //delete token if exists
-    let token = await Token.findOne({userid: user._id})
+    let token = await Token.findOne({ userId: user._id });
     if (token){
         await token.deleteOne()
     }

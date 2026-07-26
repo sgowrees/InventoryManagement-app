@@ -1,56 +1,53 @@
 const asyncHandler = require("express-async-handler");
 const Product = require("../models/productModel");
-const { fileSizeFormatter } = require("../utils/fileUpload");
-const { json } = require("body-parser");
-const cloudinary = require("cloudinary").v2;
-const { uploadToCloudinary , deleteFromCloudinary } = require("../utils/cloudinary");
+const { uploadToCloudinary } = require("../utils/cloudinary");
+const { get, set, del, delPattern, cacheKeys } = require("../utils/redis");
 
+const invalidateProductCache = async (userId, productId) => {
+    await del(cacheKeys.products(userId));
+    if (productId) await del(cacheKeys.product(productId));
+    await delPattern(`products:user:${userId}:*`);
+};
 
-
-const createProduct = asyncHandler(async (req,res) => {
-    console.log('Create product request received');
-    console.log('Request body:', req.body);
-    console.log('Request file:', req.file);
-
+const createProduct = asyncHandler(async (req, res) => {
     const { name, sku, category, quantity, price, description } = req.body;
 
-    //validate
-    if(!name || !sku || !category || !quantity || !price || !description){
+    if (!name || !sku || !category || !quantity || !price || !description) {
         res.status(400);
-        throw new Error("Please fill in missing fields")
+        throw new Error("Please fill in missing fields");
     }
 
-    if (price < 0 ){
+    if (price < 0) {
         res.status(400);
-        throw new Error("Invalid price")
+        throw new Error("Invalid price");
     }
-    if (quantity < 0 ){
+    if (quantity < 0) {
         res.status(400);
-        throw new Error("Invalid quantity")
+        throw new Error("Invalid quantity");
     }
+
     const productExists = await Product.findOne({
         $or: [
-            {
-                sku: { $regex: `^${sku}$`, $options: "i" }
-            },
+            { sku: { $regex: `^${sku}$`, $options: "i" } },
             {
                 name: { $regex: `^${name}$`, $options: "i" },
                 price,
-                category: { $regex: `^${category}$`, $options: "i" }
-            }
-        ]
-    });    
-    if(productExists){
-        res.status(400)
-        throw new Error("Product already Exists")
+                category: { $regex: `^${category}$`, $options: "i" },
+            },
+        ],
+    });
+
+    if (productExists) {
+        res.status(400);
+        throw new Error("Product already Exists");
     }
-    //img upload
-    let imageURL = '';
-    if (req.file){
+
+    let imageURL = "";
+    if (req.file) {
         const result = await uploadToCloudinary(req.file.buffer);
         imageURL = result.secure_url;
     }
-    // create product
+
     const product = await Product.create({
         userId: req.user._id,
         name,
@@ -59,117 +56,113 @@ const createProduct = asyncHandler(async (req,res) => {
         quantity,
         price,
         description,
-        photo: imageURL || "https://res.cloudinary.com/dduozzr2g/image/upload/v1777920605/default-user_nscsn1.jpg"
- 
+        photo:
+            imageURL ||
+            "https://res.cloudinary.com/dduozzr2g/image/upload/v1777920605/default-user_nscsn1.jpg",
     });
-    if (product){
-        res.status(201).json({
-            userId: req.user._id,
-            name: product.name,
-            sku: product.sku,
-            category: product.category,
-            quantity: product.quantity,
-            price: product.price,
-            description: product.description,
-            photo: product.photo
 
-    })}else{
-        res.status(400)
-        throw new Error("Could not create product")
+    if (!product) {
+        res.status(400);
+        throw new Error("Could not create product");
     }
 
+    await invalidateProductCache(req.user._id.toString());
+
+    res.status(201).json({
+        _id: product._id,
+        userId: req.user._id,
+        name: product.name,
+        sku: product.sku,
+        category: product.category,
+        quantity: product.quantity,
+        price: product.price,
+        description: product.description,
+        photo: product.photo,
+    });
 });
 
-// get all products + search + sort
 const getProducts = asyncHandler(async (req, res) => {
-
     const { search, sort, category } = req.query;
-
-    // FIX: safer user id access
     const userId = req.user?._id;
 
     if (!userId) {
         return res.status(401).json({ message: "Not authorized" });
     }
 
-    let filter = {
-        userId: userId
-    };
-
-    // SEARCH
-    if (search) {
-        filter.name = {
-            $regex: search,
-            $options: "i"
-        };
+    const cacheKey = `${cacheKeys.products(userId)}:${search || ""}:${sort || ""}:${category || ""}`;
+    const cached = await get(cacheKey);
+    if (cached) {
+        return res.status(200).json(cached);
     }
 
-    // CATEGORY FILTER
+    let filter = { userId };
+
+    if (search) {
+        filter.name = { $regex: search, $options: "i" };
+    }
+
     if (category) {
         filter.category = category;
     }
 
     let query = Product.find(filter);
 
-    // SORT FIX
     if (sort) {
         const sortOption =
-            sort === "asc" ? "name" :
-            sort === "desc" ? "-name" :
-            sort;
-
+            sort === "asc" ? "name" : sort === "desc" ? "-name" : sort;
         query = query.sort(sortOption);
     }
 
     const products = await query;
+    await set(cacheKey, products, 300);
 
     res.status(200).json(products);
 });
 
-
-//get one product
-const getProduct = asyncHandler( async (req, res) =>{
-
-    const product = await Product.findById(req.params.id);
-    //validate
-    if(!product){
-        res.status(400)
-        throw new Error("product not found")
+const getProduct = asyncHandler(async (req, res) => {
+    const cacheKey = cacheKeys.product(req.params.id);
+    const cached = await get(cacheKey);
+    if (cached) {
+        if (cached.userId.toString() !== req.user._id.toString()) {
+            res.status(403);
+            throw new Error("User not authorized");
+        }
+        return res.status(200).json(cached);
     }
 
-    if (product.user.toString() !== req.user_id){
-        res.status(400)
-        throw new Error("User not authorized")
-    }
-
-    res.status(200).json(product)
-
-});
-
-
-const deleteProduct = asyncHandler(async (req, res) => {
-
     const product = await Product.findById(req.params.id);
-
 
     if (!product) {
-        res.status(400);
+        res.status(404);
+        throw new Error("product not found");
+    }
+
+    if (product.userId.toString() !== req.user._id.toString()) {
+        res.status(403);
+        throw new Error("User not authorized");
+    }
+
+    await set(cacheKey, product, 600);
+    res.status(200).json(product);
+});
+
+const deleteProduct = asyncHandler(async (req, res) => {
+    const product = await Product.findById(req.params.id);
+
+    if (!product) {
+        res.status(404);
         throw new Error("Product not found");
     }
 
-    // authorization
     if (product.userId.toString() !== req.user._id.toString()) {
-    res.status(400);
-    throw new Error("User not authorized");
+        res.status(403);
+        throw new Error("User not authorized");
     }
 
-    // delete
     await product.deleteOne();
+    await invalidateProductCache(req.user._id.toString(), req.params.id);
 
-    res.status(200).json({
-        message: "Product deleted."
-    });
-
+    res.status(200).json({ message: "Product deleted." });
 });
 
 const updateProduct = asyncHandler(async (req, res) => {
@@ -178,28 +171,24 @@ const updateProduct = asyncHandler(async (req, res) => {
 
     const product = await Product.findById(id);
 
-    // validate
     if (!product) {
-        res.status(400);
+        res.status(404);
         throw new Error("Product not found");
     }
-    if (price < 0 ){
+    if (price < 0) {
         res.status(400);
-        throw new Error("Invalid price")
+        throw new Error("Invalid price");
     }
-    if (quantity < 0 ){
+    if (quantity < 0) {
         res.status(400);
-        throw new Error("Invalid quantity")
+        throw new Error("Invalid quantity");
     }
 
-
-    // check ownership
     if (product.userId.toString() !== req.user._id.toString()) {
-        res.status(400);
+        res.status(403);
         throw new Error("User not authorized");
     }
 
-    // image upload (optional)
     let imageURL = product.photo;
 
     if (req.file) {
@@ -207,7 +196,6 @@ const updateProduct = asyncHandler(async (req, res) => {
         imageURL = result.secure_url;
     }
 
-    // update fields
     product.name = name || product.name;
     product.category = category || product.category;
     product.quantity = quantity || product.quantity;
@@ -216,6 +204,8 @@ const updateProduct = asyncHandler(async (req, res) => {
     product.sku = sku || product.sku;
     product.photo = imageURL;
     const updatedProduct = await product.save();
+
+    await invalidateProductCache(req.user._id.toString(), id);
 
     res.status(200).json({
         _id: updatedProduct._id,
@@ -229,17 +219,10 @@ const updateProduct = asyncHandler(async (req, res) => {
     });
 });
 
-
-
-
-
 module.exports = {
     createProduct,
     getProducts,
     getProduct,
     deleteProduct,
     updateProduct,
-    
-
-
 };

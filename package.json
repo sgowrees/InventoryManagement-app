@@ -1,0 +1,43 @@
+{
+  "name": "inventory-management-app",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Inventory Management App - backend, tests (unit, integration, API, E2E)",
+  "main": "backend/index.js",
+  "type": "commonjs",
+  "scripts": {
+    "start": "node backend/index.js",
+    "dev": "nodemon backend/index.js",
+    "test:unit": "jest tests/unit",
+    "test:integration": "jest tests/integration",
+    "test:api": "newman run tests/api/loginUser.postman_collection.json",
+    "test:e2e": "playwright test --config=tests/playwright.config.js tests/e2e",
+    "test:automation": "node tests/scripts/run_tests.js",
+    "test": "npm run test:unit && npm run test:integration"
+  },
+  "dependencies": {
+    "bcryptjs": "^3.0.3",
+    "body-parser": "^2.2.2",
+    "cloudinary": "^2.10.0",
+    "cookie-parser": "^1.4.7",
+    "cors": "^2.8.6",
+    "dotenv": "^17.4.2",
+    "express": "^5.2.1",
+    "express-async-handler": "^1.2.0",
+    "ioredis": "^5.11.1",
+    "jsonwebtoken": "^9.0.3",
+    "mongoose": "^9.6.1",
+    "multer": "^2.1.1",
+    "nodemailer": "^8.0.7",
+    "streamifier": "^0.1.1"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.62.0",
+    "jest": "^30.4.2",
+    "jest-junit": "^16.0.0",
+    "mongodb-memory-server": "^11.2.0",
+    "newman": "^6.2.2",
+    "newman-reporter-junitfull": "^1.0.7",
+    "supertest": "^7.2.2"
+  }
+}
